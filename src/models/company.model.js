@@ -11,6 +11,13 @@ const CompanySchema = new mongoose.Schema(
       default: []
     },
     location: String,
+    socials: {
+      instagram: String,
+      whatsapp: String,
+      facebook: String,
+      twitter: String,
+      linkedin: String
+    },
     platform: String
   },
   { timestamps: true }

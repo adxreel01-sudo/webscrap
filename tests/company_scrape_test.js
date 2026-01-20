@@ -6,7 +6,7 @@ const axios = require("axios");
   const response = await axios.post(
     "http://localhost:5000/api/company/scrape",
     {
-      website: "https://caketoppersindia.com"
+      website: "https://www.skechers.in/"
     }
   );
 

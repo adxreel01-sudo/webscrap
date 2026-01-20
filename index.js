@@ -1,22 +1,23 @@
 console.log("🚀 Scraper pipeline started");
 
-// ===== DIRECTLY REQUIRE ACTUAL FILES =====
-// ⚠️ Adjust filenames ONLY if yours are different
+const fs = require("fs");
+const path = require("path");
 
-const discoverUrls = require("./crawler/categoryCrawler");
-const classifyUrls = require("./classifier/productPageClassifier");
+const discoverUrls = require("./discovery/discoverUrls");
+const classifyUrls = require("./classifier/classifyUrls"); // pure classifier
 const extractProducts = require("./extractor/productExtractor");
 const upsertProducts = require("./dbUpsert");
 
-// ===== COMPANY CONTEXT (FROM CRON / runPipeline.js) =====
+// ===== COMPANY CONTEXT =====
 const COMPANY_ID = process.env.COMPANY_ID;
 const COMPANY_WEBSITE = process.env.COMPANY_WEBSITE;
 
 if (!COMPANY_ID || !COMPANY_WEBSITE) {
   console.error("❌ Company context missing");
-  console.error("COMPANY_ID or COMPANY_WEBSITE not provided");
   process.exit(1);
 }
+
+const companyDir = path.join(__dirname, "data", COMPANY_ID);
 
 // ===== MAIN PIPELINE =====
 async function runPipeline() {
@@ -24,27 +25,42 @@ async function runPipeline() {
     console.log(`🏢 Company ID: ${COMPANY_ID}`);
     console.log(`🌐 Website: ${COMPANY_WEBSITE}`);
 
-    // STEP 1 — URL DISCOVERY
+    // STEP 1 — DISCOVERY (Milestone 2)
     console.log("🔍 Step 1: Discovering product URLs");
-    await discoverUrls(COMPANY_WEBSITE, COMPANY_ID);
+    const discoveredUrls = await discoverUrls({
+      website: COMPANY_WEBSITE,
+      companyId: COMPANY_ID
+    });
+
+    fs.writeFileSync(
+      path.join(companyDir, "discoveredUrls.json"),
+      JSON.stringify(discoveredUrls, null, 2)
+    );
 
     // STEP 2 — CLASSIFICATION
     console.log("🧠 Step 2: Classifying URLs");
-    await classifyUrls(COMPANY_ID);
+    const productUrls = await classifyUrls({
+      companyId: COMPANY_ID,
+      urls: discoveredUrls
+    });
 
-    // STEP 3 — EXTRACTION
-    console.log("📦 Step 3: Extracting product data");
+    fs.writeFileSync(
+      path.join(companyDir, "classifiedUrls.json"),
+      JSON.stringify(productUrls, null, 2)
+    );
+
+    // STEP 3 — EXTRACTION (Adapter-aware)
+    console.log("📦 Step 3: Extracting products");
     await extractProducts(COMPANY_ID);
 
     // STEP 4 — DB UPSERT
-    console.log("💾 Step 4: Upserting products to DB");
+    console.log("💾 Step 4: Upserting into DB");
     await upsertProducts(COMPANY_ID);
 
-    console.log("🎉 Scraper pipeline completed successfully");
-  } catch (error) {
-    console.error("❌ Scraper pipeline failed:", error.message);
+    console.log("🎉 Pipeline completed successfully");
+  } catch (err) {
+    console.error("❌ Pipeline failed:", err.message);
   }
 }
 
-// ===== RUN =====
 runPipeline();

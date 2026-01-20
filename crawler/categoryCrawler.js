@@ -1,45 +1,38 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { productPatterns } = require("../utils/urlRules");
+const fs = require("fs");
+const path = require("path");
 
-function looksLikeProduct(url) {
-  return productPatterns.some(p => url.includes(p));
-}
+module.exports = async function discoverUrls(website, companyId) {
 
-async function crawlCategories(startUrl, maxPages = 50) {
-  const visited = new Set();
-  const productUrls = new Set();
-  const queue = [startUrl];
+  const sitemapUrl = website.replace(/\/$/, "") + "/sitemap.xml";
+  console.log(`🌐 Using sitemap: ${sitemapUrl}`);
 
-  while (queue.length && visited.size < maxPages) {
-    const url = queue.shift();
-    if (visited.has(url)) continue;
-    visited.add(url);
+  let productUrls = [];
 
-    try {
-      const res = await axios.get(url, { timeout: 10000 });
-      const $ = cheerio.load(res.data);
+  try {
+    const res = await axios.get(sitemapUrl, { timeout: 15000 });
+    const $ = cheerio.load(res.data, { xmlMode: true });
 
-      $("a[href]").each((_, a) => {
-        const href = $(a).attr("href");
-        if (!href) return;
-
-        const abs = href.startsWith("http")
-          ? href
-          : new URL(href, startUrl).href;
-
-        if (looksLikeProduct(abs)) {
-          productUrls.add(abs);
-        } else if (!visited.has(abs)) {
-          queue.push(abs);
-        }
-      });
-    } catch (err) {
-      console.error("Failed to crawl:", url);
-    }
+    $("loc").each((_, el) => {
+      const url = $(el).text();
+      if (url.includes("/products/")) {
+        productUrls.push(url);
+      }
+    });
+  } catch (err) {
+    console.log("⚠️ Sitemap fetch failed");
   }
 
-  return Array.from(productUrls);
-}
+  const companyDir = path.join(__dirname, "..", "data", String(companyId));
+  if (!fs.existsSync(companyDir)) {
+    fs.mkdirSync(companyDir, { recursive: true });
+  }
 
-module.exports = crawlCategories;
+  fs.writeFileSync(
+    path.join(companyDir, "discoveredUrls.json"),
+    JSON.stringify(productUrls, null, 2)
+  );
+
+  console.log(`✅ Discovered ${productUrls.length} URLs for ${companyId}`);
+};

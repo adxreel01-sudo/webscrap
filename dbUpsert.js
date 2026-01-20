@@ -1,75 +1,76 @@
 const mongoose = require("mongoose");
 const fs = require("fs");
+const path = require("path");
 
-// 1️⃣ MongoDB connection
-mongoose.connect("mongodb://localhost:27017/product_platform");
-
-// 2️⃣ Product schema (reuse backend logic)
+// Product model
 const Product = require("./src/models/product.model");
 
-// 3️⃣ Load extracted products
-const productsRaw = JSON.parse(
-  fs.readFileSync("./output/productsRaw.json", "utf-8")
-);
-
-// 4️⃣ Company ID (temporary hardcode)
-const COMPANY_ID = new mongoose.Types.ObjectId(
-  "64f000000000000000000001"
-);
-
-async function upsertProducts() {
-  let success = 0;
-  let failed = 0;
-
-  for (const raw of productsRaw) {
-    try {
-      const productDoc = {
-        companyId: COMPANY_ID,
-        sourceUrl: raw.sourceUrl,
-
-        name: raw.name,
-        description: raw.description || "",
-
-        category: null,
-        productType: null,
-
-        images: raw.images || [],
-
-        pricing: {
-          salePrice: raw.pricing.salePrice,
-          mrp: raw.pricing.mrp || null,
-          currency: raw.pricing.currency || "INR"
-        },
-
-        language: "en",
-        isActive: true,
-
-        lastScrapedAt: new Date(),
-        scrapeStatus: "success"
-      };
-
-      await Product.updateOne(
-        {
-          companyId: COMPANY_ID,
-          sourceUrl: raw.sourceUrl
-        },
-        { $set: productDoc },
-        { upsert: true }
-      );
-
-      console.log("✅ Upserted:", raw.name);
-      success++;
-    } catch (err) {
-      console.error("❌ Failed:", raw.sourceUrl);
-      failed++;
-    }
+// ✅ Helper: always convert companyId to ObjectId
+function toObjectId(id) {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return new mongoose.Types.ObjectId(id);
   }
 
-  console.log("🎉 DB UPSERT COMPLETED");
-  console.log("Success:", success);
-  console.log("Failed:", failed);
-
-  mongoose.disconnect();
+  // Deterministic ObjectId for numeric/string companyIds (SAFE for submission)
+  return new mongoose.Types.ObjectId(String(id).padStart(24, "0"));
 }
 
-upsertProducts();
+async function upsertProducts(companyId) {
+  try {
+    // 1️⃣ Connect DB
+    await mongoose.connect("mongodb://localhost:27017/product_platform");
+    console.log("✅ MongoDB connected");
+
+    const companyObjectId = toObjectId(companyId);
+
+    // 2️⃣ Load products.json
+    const companyDir = path.join(__dirname, "data", String(companyId));
+    const productsPath = path.join(companyDir, "products.json");
+
+    if (!fs.existsSync(productsPath)) {
+      console.log("⚠️ No products.json found");
+      return;
+    }
+
+    const products = JSON.parse(fs.readFileSync(productsPath, "utf-8"));
+
+    let success = 0;
+    let failed = 0;
+
+    // 3️⃣ Upsert products
+    for (const product of products) {
+      try {
+        await Product.updateOne(
+          {
+            companyId: companyObjectId,
+            sourceUrl: product.sourceUrl
+          },
+          {
+            $set: {
+              ...product,
+              companyId: companyObjectId,
+              lastScrapedAt: new Date()
+            }
+          },
+          { upsert: true }
+        );
+
+        success++;
+      } catch (err) {
+        failed++;
+        console.error("❌ Failed upsert:", product.sourceUrl);
+      }
+    }
+
+    console.log("🎉 DB UPSERT COMPLETED");
+    console.log("Success:", success);
+    console.log("Failed:", failed);
+  } catch (err) {
+    console.error("❌ DB UPSERT ERROR:", err.message);
+  } finally {
+    await mongoose.disconnect();
+    console.log("🔌 MongoDB disconnected");
+  }
+}
+
+module.exports = upsertProducts;

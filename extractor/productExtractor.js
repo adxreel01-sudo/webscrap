@@ -1,43 +1,46 @@
-const axios = require("axios");
+const fs = require("fs");
+const path = require("path");
+const extractShopifyProduct = require("../adapters/shopify.extractor");
 
-async function extractProduct(url) {
-  try {
-    const jsonUrl = url.endsWith(".json") ? url : `${url}.json`;
+module.exports = async function extractProducts(companyId) {
+  const companyDir = path.join(__dirname, "..", "data", String(companyId));
 
-    const response = await axios.get(jsonUrl, {
-      timeout: 15000,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120",
-        "Accept": "application/json"
-      }
-    });
+  const urls = JSON.parse(
+    fs.readFileSync(path.join(companyDir, "classifiedUrls.json"), "utf-8")
+  );
 
-    const product = response.data.product;
-    if (!product) return null;
+  const products = [];
 
-    return {
+  for (const url of urls) {
+    const product = await extractShopifyProduct(url);
+    if (!product) continue;
+
+    products.push({
+      companyId,
       sourceUrl: url,
-      name: product.title,
-      description: product.body_html
-        ? product.body_html.replace(/<[^>]*>/g, "").trim()
-        : "",
-      images: product.images.map((img, index) => ({
-        url: img.src,
-        isPrimary: index === 0
-      })),
-      pricing: {
-        salePrice: product.variants?.[0]?.price
-          ? Number(product.variants[0].price)
-          : null,
-        mrp: null,
-        currency: "INR"
-      },
-      isActive: product.available
-    };
-  } catch (error) {
-    return null;
-  }
-}
 
-module.exports = extractProduct;
+      name: product.name,
+      description: product.description,
+
+      images: product.images,
+      pricing: product.pricing,
+      variants: product.variants,
+
+      category: null,
+      productType: null,
+
+      language: "en",
+      isActive: true,
+
+      lastScrapedAt: new Date(),
+      scrapeStatus: "success"
+    });
+  }
+
+  fs.writeFileSync(
+    path.join(companyDir, "products.json"),
+    JSON.stringify(products, null, 2)
+  );
+
+  console.log(`📦 Extracted ${products.length} products for ${companyId}`);
+};

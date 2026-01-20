@@ -1,43 +1,36 @@
-const axios = require("axios");
 const cheerio = require("cheerio");
 
-async function isProductPage(url) {
-  try {
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120"
-      }
-    });
+async function isProductPage({ url, html }) {
+  if (!html) return false;
 
-    const html = response.data;
-    const $ = cheerio.load(html);
+  const $ = cheerio.load(html);
 
-    let score = 0;
-
-    // 1️⃣ Product title
-    if ($("h1").text().trim().length > 3) score += 2;
-
-    // 2️⃣ Price detection
-    if (html.match(/₹|\$|€|price/i)) score += 2;
-
-    // 3️⃣ Add to cart / Buy button
-    if (
-      html.match(/add to cart/i) ||
-      html.match(/buy now/i)
-    ) {
-      score += 3;
-    }
-
-    // 4️⃣ Product images
-    if ($("img").length > 3) score += 1;
-
-    // Decision
-    return score >= 5;
-  } catch (error) {
-    return false;
+  // 1️⃣ Canonical product URL (very strong)
+  const canonical = $('link[rel="canonical"]').attr("href");
+  if (canonical && canonical.includes("/products/")) {
+    return true;
   }
+
+  // 2️⃣ OpenGraph product type
+  const ogType = $('meta[property="og:type"]').attr("content");
+  if (ogType === "product") {
+    return true;
+  }
+
+  // 3️⃣ Shopify product JSON
+  if (
+    html.includes("application/json") &&
+    html.includes('"product"')
+  ) {
+    return true;
+  }
+
+  // 4️⃣ Fallback: URL pattern
+  if (url.includes("/products/")) {
+    return true;
+  }
+
+  return false;
 }
 
 module.exports = isProductPage;

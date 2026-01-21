@@ -74,6 +74,7 @@ async function runPipeline() {
     }
 
     console.log("🎉 Pipeline finished successfully");
+    
   } catch (error) {
     console.error("❌ Pipeline failed:", error.message);
   }

@@ -6,10 +6,7 @@ const CompanySchema = new mongoose.Schema(
     name: String,
     about: String,
     email: String,
-    phones: {
-      type: [String],
-      default: []
-    },
+    phones: { type: [String], default: [] },
     location: String,
     socials: {
       instagram: String,
@@ -18,7 +15,15 @@ const CompanySchema = new mongoose.Schema(
       twitter: String,
       linkedin: String
     },
-    platform: String
+    platform: String,
+
+    // ✅ STEP 1 ADDITIONS
+    scrapeStatus: {
+      type: String,
+      enum: ["success", "partial", "failed"],
+      default: "success"
+    },
+    lastScrapedAt: Date
   },
   { timestamps: true }
 );

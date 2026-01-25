@@ -1,30 +1,25 @@
-const fs = require("fs");
-const path = require("path");
-const getPageHtml = require("../core/getPageHtml");
-const extractProduct = require("../core/extractProduct");
+const detectPlatform = require("../adapters/detectPlatform");
+const extractShopifyProduct = require("../adapters/shopify/extract");
+const extractGenericProduct = require("./genericExtract");
+const extractWithPlaywright = require("../scraper/playwright/extractProductPage");
 
-async function extractProducts(companyId, productUrls) {
-  const products = [];
+async function extractProduct({ url, html }) {
+  // 🟢 CASE 1: We have HTML (fast path)
+  if (html) {
+    const platform = detectPlatform(html);
 
-  for (const url of productUrls) {
-    const html = getPageHtml({ url, companyId });
-    if (!html) continue;
+    if (platform === "shopify") {
+      const shopify = await extractShopifyProduct({ url, html });
+      if (shopify) return shopify;
+    }
 
-    const product = extractProduct({ url, html });
-    if (!product) continue;
-
-    products.push(product);
+    const generic = extractGenericProduct({ url, html });
+    if (generic) return generic;
   }
 
-  const outputDir = path.join(__dirname, "..", "output");
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
-
-  fs.writeFileSync(
-    path.join(outputDir, "productsRaw.json"),
-    JSON.stringify(products, null, 2)
-  );
-
-  console.log(`📦 Extracted ${products.length} products`);
+  // 🟠 CASE 2: No HTML → Playwright PDP (Bluestone, custom sites)
+  console.log("🧠 Playwright PDP extract:", url);
+  return await extractWithPlaywright({ url });
 }
 
-module.exports = extractProducts;
+module.exports = extractProduct;

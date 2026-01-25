@@ -2,6 +2,7 @@ const discoverFromSitemap = require("./tiers/sitemap");
 const discoverFromPlatform = require("./tiers/platform");
 const discoverFromCategories = require("./tiers/categories");
 const discoverFromHomepage = require("./tiers/homepage");
+const discoverWithPlaywright = require("../scraper/playwright/extractProductLinks.generic");
 
 async function discoverUrls({ website, companyId }) {
   console.log("🔍 Discovery started");
@@ -30,10 +31,29 @@ async function discoverUrls({ website, companyId }) {
   }
 
   // TIER 4 — Homepage crawl
-  urls = await discoverFromHomepage({ website, companyId });
-  console.log(`⚠️ Homepage discovery result (${urls.length})`);
+urls = await discoverFromHomepage({ website, companyId });
+console.log(`⚠️ Homepage discovery result (${urls.length})`);
 
-  return urls;
+if (urls.length > 0) return urls;
+
+// 🔥 TIER 5 — Playwright fallback (GENERIC)
+console.log("🧠 Falling back to Playwright discovery");
+
+try {
+  const playwrightUrls = await discoverWithPlaywright({
+    url: website +"/jewellery/rings.html"
+  });
+
+  console.log(
+    `✅ Playwright discovery result (${playwrightUrls.length})`
+  );
+
+  return playwrightUrls;
+} catch (err) {
+  console.error("❌ Playwright discovery failed:", err.message);
+  return [];
+}
+
 }
 
 module.exports = discoverUrls;

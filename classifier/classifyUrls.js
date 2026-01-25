@@ -1,11 +1,13 @@
 async function classifyUrls({ companyId, urls }) {
   if (!Array.isArray(urls)) return [];
 
-  // PRODUCTION RULE:
-  // If discovery already found product-like URLs, trust them
   const productUrls = urls.filter(url =>
-    url.includes("/products/")
+    url.match(/~\d+\.html$/) ||   // Bluestone-style
+    url.includes("/products/") || // Shopify
+    url.split("/").length > 5     // generic deep product URL
   );
+
+  console.log(`🧠 Classified product URLs: ${productUrls.length}`);
 
   return productUrls;
 }
